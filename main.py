@@ -1,15 +1,15 @@
+# UARTFish (PICO3)
 from machine import UART, ADC, Pin, I2C
 import time
 from math import sqrt, atan2, pi, copysign, sin, cos, log
-from os import urandom, statvfs
+from os import urandom, statvfs, listdir, remove, ilistdir
 import re
 import onewire, ds18x20
 # led Blink off
 blinkonoff="dot"
+iStopData=0
 
 myUsart0 = UART(0, baudrate=1200, bits=8, tx=Pin(0), rx=Pin(1), timeout=15)
-# myUsart1 = UART(1, baudrate=115200, bits=8, tx=Pin(8), rx=Pin(9), timeout=15)
-# IC2 addresses 
 # set real time clock
 rtc=machine.RTC()
 # internal temperatute
@@ -44,11 +44,8 @@ files_items= statvfs("/")
 file = open(timestringfilename, "w")
 file.write("Time,Thermister,Voltage,ThrCnt,Internal Temp degF,,IT_Cnt,Tmp IC degF,PhotoR,PhtCnt,Press,PRcnt,Battery,BtCNt,MemAvailable\n")
 file.close()
-# led Blink off
+# led Blink flashes
 blinkonoff="dot"
-# Write filename to UART
-# myUsart0.write("timestringfilename:" + timestringfilename + "\n")
-# Do not send message to myUsart0
 debug="off"
 
 if USBpower() == 1:
@@ -105,14 +102,8 @@ def LowBattBlink():
 
 try:
     while True:
-        # time.sleep(1)
-        # timestamp=rtc.datetime()
-        # myUsart0.write("Start it>>> " + str(myUsart0.any())+ "\n")
-        # have remote pico receive commands
-        # CMDS: time, blink, tbd
-        # if myUsart0.any() == 1:
-            # print("myUsart0.any()=1")
-            # machine.soft_reset()
+        # have this pico receive commands
+        # CMDS: time, header,blink, listfiles, printfile, allfileinfo
             
         if myUsart0.any() > 1:  # oringally 0 , but restart makes this 1?
             rxData = bytes()
@@ -123,7 +114,7 @@ try:
             myUsart0.write("CMD:" + cmdstring +"\n") # "{}".format(rxData.decode('utf-8')))
             regex = re.compile(",")
             cmd = regex.split(cmdstring)
-            if str.lower(cmd[0]) == 'time':
+            if str.lower(cmd[0]) == 'time' or str.lower(cmd[0]) == '00time':
 # set time command:
 #     "time,YYYY-mm-dd dow HH:MM:SS"
 # spaces are important, dow is a number for the day of the week (where Monday is 1 and Sunday is 7)
@@ -145,6 +136,13 @@ try:
                 print("My tuple:", finaltime, "PICO Now tuple:", timestamp)
                 rtc.datetime(finaltime)
                 timestamp=rtc.datetime()
+                
+# Create new file with now time
+                timestringfilename="Fish%04d%02d%02d%02d%02d%02d.csv"%(timestamp[0:3] + timestamp[4:7])
+                file = open(timestringfilename, "w")
+                file.write("Time,Thermister,Voltage,ThrCnt,Internal Temp degF,,IT_Cnt,Tmp IC degF,PhotoR,PhtCnt,Press,PRcnt,Battery,BtCNt,MemAvailable\n")
+                file.close()
+
             elif str.lower(cmd[0]) == 'header':
                 myUsart0.write("Header in 10 seconds\n")
                 time.sleep(10)
@@ -169,6 +167,52 @@ try:
 #      "debug,dot"
 #            for just dots
                 debug = cmd[1]
+            elif str.lower(cmd[0]) == 'listfiles':
+# listfiles command will simply send a list the files on the RP to the remote system
+                myUsart0.write("listfiles")
+                time.sleep(5)
+                listfiles=listdir()
+                print("listfiles",listfiles)
+                for filename in listfiles:
+                    myUsart0.write(filename+"\n")
+                myUsart0.write("\n")
+                time.sleep(2)
+                iStopData=3  # if iStopData = 1 then don't send new data to the  remote computer.  iStopData=3 will delay the data stop a couple cycles 
+            elif str.lower(cmd[0]) == 'allfileinfo':
+# allfileinfo command will send a list the files and file size on the RP to the remote system
+                myUsart0.write("all file info")
+                time.sleep(5)
+                ilistfiles=ilistdir()
+                for ilist in ilistfiles:
+                    print(ilist[0],ilist[3],end=" ")
+                ilistfiles=ilistdir()
+                for ilist in ilistfiles:
+                    myUsart0.write(ilist[0],ilist[3],end=" ")
+                myUsart0.write("\n")
+                time.sleep(2)
+                iStopData=3  # if iStopData = 1 then don't send new data to the  remote computer.  iStopData=3 will delay the data stop a couple cycles 
+            elif str.lower(cmd[0]) == 'printfile':
+# printfile command will print a file to the remote system.  Does not work well, yet.  The "printed" file is imcomplete. A later downlod is better. 
+                time.sleep(2)
+                downloadfile=cmd[1]
+                iLine=0
+                with open(downloadfile,'r') as input:
+                    for line1 in input:
+                        myUsart0.write(line1)
+                        iLine=iLine+1
+                        if iLine<3:
+                            print("FileDump:",line1) # Only print to the screen the first line as a check.  Make is faster, less dropouts? 
+                time.sleep(2)
+                myUsart0.write("EOF")
+                print("Filedump Complete")
+                iStopData=1  # if iStopData = 1 then don't send new data to the  remote computer. 
+            elif str.lower(cmd[0]) == 'remove':
+# remove a seleted file from the this RP. 
+                print("remove:", cmd[1])
+                remove(cmd[1])
+                iStopData=1    # if iStopData = 1 then don't send new data to the remote computer. 
+            elif str.lower(cmd[0]) == 'restart':
+                iStopData=0    # if iStopData = 0 then send new data to the remote computer. 
             else:
                 print("Not known command")
             # myUsart0.write(cmdstring) # "{}".format(rxData.decode('utf-8')))
@@ -218,14 +262,19 @@ try:
         tempRpt = str(tempFCorr)+","+str(voltage)+","+str(adcValue)+","+str(tmpF)+","+str(reading)+","+str(temperatureF)+","+str(photoVolt)+","+str(photoValue)+","+str(Pressure)+","+str(pressValue)+","+str(batt)+","+str(battL)+","+str(filesize)
         # tempRpt = str(tempF) + ", " + str(adcValue) + ", " + str(tmpF)  + ", " + str(reading)  + ", " + str(batt) + ", " + str(battL) 
         # print(tempRpt)
-        myUsart0.write(timestring + "," + tempRpt) # + "\n")
+        if iStopData==0:
+            myUsart0.write(timestring + "," + tempRpt) # + "\n")
+        elif iStopData>1:
+            myUsart0.write(timestring + "," + tempRpt) # + "\n")
+            iStopData=iStopData-1
+            
         file = open(timestringfilename, "a")
         # file.write(timestring + "," + tempRpt + "\n")
         file.write(timestring + "," + tempRpt + "\n")
         file.close()
         
         if USBpower() == 1:
-             print(timestring, ",", tempRpt)
+             print("iStop:",iStopData, timestring, ",", tempRpt)
         #t0 = time.ticks_us()
         if blinkonoff == 'ON' or blinkonoff == 'on':
             convert2blinks(tempF)
