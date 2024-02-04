@@ -1,12 +1,11 @@
 from machine import UART, ADC, Pin, I2C
 import time
 from math import sqrt, atan2, pi, copysign, sin, cos, log
-from os import urandom, statvfs, listdir, remove
+from os import urandom, statvfs
 import re
 import onewire, ds18x20
 # led Blink off
 blinkonoff="dot"
-iStopData=0
 
 myUsart0 = UART(0, baudrate=1200, bits=8, tx=Pin(0), rx=Pin(1), timeout=15)
 # myUsart1 = UART(1, baudrate=115200, bits=8, tx=Pin(8), rx=Pin(9), timeout=15)
@@ -106,7 +105,7 @@ def LowBattBlink():
 
 try:
     while True:
-        # time.sleep(1)-
+        # time.sleep(1)
         # timestamp=rtc.datetime()
         # myUsart0.write("Start it>>> " + str(myUsart0.any())+ "\n")
         # have remote pico receive commands
@@ -124,7 +123,7 @@ try:
             myUsart0.write("CMD:" + cmdstring +"\n") # "{}".format(rxData.decode('utf-8')))
             regex = re.compile(",")
             cmd = regex.split(cmdstring)
-            if str.lower(cmd[0]) == 'time' or str.lower(cmd[0]) == '00time':
+            if str.lower(cmd[0]) == 'time':
 # set time command:
 #     "time,YYYY-mm-dd dow HH:MM:SS"
 # spaces are important, dow is a number for the day of the week (where Monday is 1 and Sunday is 7)
@@ -170,37 +169,6 @@ try:
 #      "debug,dot"
 #            for just dots
                 debug = cmd[1]
-            elif str.lower(cmd[0]) == 'listfiles':
-# listfiles command will simply list the files on the RP
-                myUsart0.write("listfiles")
-                time.sleep(5)
-                listfiles=listdir()
-                print("listfiles",listfiles)
-                for filename in listfiles:
-                    myUsart0.write(filename+"\n")
-                myUsart0.write("\n")
-                time.sleep(2)
-                iStopData=3
-            elif str.lower(cmd[0]) == 'printfile':
-                time.sleep(2)
-                downloadfile=cmd[1]
-                iLine=0
-                with open(downloadfile,'r') as input:
-                    for line1 in input:
-                        myUsart0.write(line1)
-                        iLine=iLine+1
-                        if iLine<3:
-                            print("FileDump:",line1)
-                time.sleep(2)
-                myUsart0.write("EOF")
-                print("Filedump Complete")
-                iStopData=1  
-            elif str.lower(cmd[0]) == 'remove':
-                print("remove:", cmd[1])
-                remove(cmd[1])
-                iStopData=1
-            elif str.lower(cmd[0]) == 'restart':
-                iStopData=0
             else:
                 print("Not known command")
             # myUsart0.write(cmdstring) # "{}".format(rxData.decode('utf-8')))
@@ -250,19 +218,14 @@ try:
         tempRpt = str(tempFCorr)+","+str(voltage)+","+str(adcValue)+","+str(tmpF)+","+str(reading)+","+str(temperatureF)+","+str(photoVolt)+","+str(photoValue)+","+str(Pressure)+","+str(pressValue)+","+str(batt)+","+str(battL)+","+str(filesize)
         # tempRpt = str(tempF) + ", " + str(adcValue) + ", " + str(tmpF)  + ", " + str(reading)  + ", " + str(batt) + ", " + str(battL) 
         # print(tempRpt)
-        if iStopData==0:
-            myUsart0.write(timestring + "," + tempRpt) # + "\n")
-        elif iStopData>1:
-            myUsart0.write(timestring + "," + tempRpt) # + "\n")
-            iStopData=iStopData-1
-            
+        myUsart0.write(timestring + "," + tempRpt) # + "\n")
         file = open(timestringfilename, "a")
         # file.write(timestring + "," + tempRpt + "\n")
         file.write(timestring + "," + tempRpt + "\n")
         file.close()
         
         if USBpower() == 1:
-             print("iStop:",iStopData, timestring, ",", tempRpt)
+             print(timestring, ",", tempRpt)
         #t0 = time.ticks_us()
         if blinkonoff == 'ON' or blinkonoff == 'on':
             convert2blinks(tempF)
