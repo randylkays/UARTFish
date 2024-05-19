@@ -259,7 +259,7 @@ try:
         # filesize=mem_free()
         filesize=files_item[3]
 
-        tempRpt = str(tempFCorr)+","+str(voltage)+","+str(adcValue)+","+str(tmpF)+","+str(reading)+","+str(temperatureF)+","+str(photoVolt)+","+str(photoValue)+","+str(Pressure)+","+str(pressValue)+","+str(batt)+","+str(battL)+","+str(filesize)
+        tempRpt = str(tempF)+","+str(voltage)+","+str(adcValue)+","+str(tmpF)+","+str(reading)+","+str(temperatureF)+","+str(photoVolt)+","+str(photoValue)+","+str(Pressure)+","+str(pressValue)+","+str(batt)+","+str(battL)+","+str(filesize)
         # tempRpt = str(tempF) + ", " + str(adcValue) + ", " + str(tmpF)  + ", " + str(reading)  + ", " + str(batt) + ", " + str(battL) 
         # print(tempRpt)
         if iStopData==0:
